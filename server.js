@@ -9,9 +9,20 @@ const principalRoutes = require('./routes/principalRoutes');
 
 const app = express();
 
+// Trust Nginx reverse proxy (fixes IP, protocol headers)
+app.set('trust proxy', true);
+
 // Middleware
-app.use(cors());
+app.use(cors({ origin: '*' }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Request logger
+app.use((req, res, next) => {
+  const ip = req.ip || req.socket.remoteAddress;
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} — IP: ${ip}`);
+  next();
+});
 
 // Routes
 app.use('/api', userRoutes);
@@ -38,8 +49,10 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-// Diagnostic: confirm what URI is being loaded from .env
-console.log('MONGO_URI loaded:', MONGO_URI ? MONGO_URI.replace(/:([^@]+)@/, ':****@') : 'UNDEFINED - .env not loaded');
+if (!MONGO_URI) {
+  console.error('FATAL: MONGO_URI is not defined. Create a .env file in the backend root with MONGO_URI=<your_connection_string>');
+  process.exit(1);
+}
 
 mongoose
   .connect(MONGO_URI)
