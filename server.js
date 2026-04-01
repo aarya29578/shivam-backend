@@ -1,11 +1,16 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config();
 
-const userRoutes      = require('./routes/userRoutes');
-const vendorRoutes    = require('./routes/vendorRoutes');
-const principalRoutes = require('./routes/principalRoutes');
+const vendorRoutes      = require('./routes/vendorRoutes');
+const principalRoutes   = require('./routes/principalRoutes');
+const formRoutes        = require('./routes/formRoutes');
+const authRoutes        = require('./routes/authRoutes');
+const noticeRoutes      = require('./routes/noticeRoutes');
+const quickPhotoRoutes  = require('./routes/quickPhotoRoutes');
+const User              = require('./models/User');
 
 const app = express();
 
@@ -17,17 +22,27 @@ app.use(cors({ origin: '*' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logger
+// Request logger (logs method, path, IP, and final response status)
 app.use((req, res, next) => {
   const ip = req.ip || req.socket.remoteAddress;
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} — IP: ${ip}`);
+  const start = Date.now();
+  res.on('finish', () => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl} → ${res.statusCode} (${Date.now() - start}ms) — IP: ${ip}`);
+  });
   next();
 });
 
 // Routes
-app.use('/api', userRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/vendor', vendorRoutes);
 app.use('/api/principal', principalRoutes);
+app.use('/api/form', formRoutes);
+app.use('/api/notices', noticeRoutes);
+app.use('/api/upload', quickPhotoRoutes);
+// Serve uploaded quick-capture photos as static files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+console.log('[Server] ✅ Form routes registered at /api/form');
+console.log('[Server] ✅ Quick-photo upload routes registered at /api/upload');
 
 // Health check
 app.get('/', (req, res) => {
@@ -56,7 +71,25 @@ if (!MONGO_URI) {
 
 mongoose
   .connect(MONGO_URI)
-  .then(() => {
+  .then(async () => {
+    // Drop legacy stale indexes that are no longer in the schema.
+    // This handles the case where a previous schema had unique email/username
+    // fields that left orphan indexes in the collection.
+    try {
+      await User.collection.dropIndex('email_1');
+      console.log('[Server] Dropped legacy email_1 index');
+    } catch (_) {
+      // Index doesn't exist – nothing to do.
+    }
+    try {
+      await User.collection.dropIndex('username_1');
+      console.log('[Server] Dropped legacy username_1 index');
+    } catch (_) {
+      // Index doesn't exist – nothing to do.
+    }
+
+    await User.syncIndexes();
+    console.log('[Server] User indexes synced');
     console.log('MongoDB Connected');
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);

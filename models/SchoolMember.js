@@ -9,6 +9,9 @@ const schoolMemberSchema = new mongoose.Schema(
     address:      { type: String, default: '' }, // stores empId for staff
     principalId:  { type: String, required: true },
     isRestricted: { type: Boolean, default: false },
+    // User management state used by principal panel
+    isLoggedIn:   { type: Boolean, default: true },
+    lastLogoutAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

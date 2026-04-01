@@ -7,15 +7,38 @@ const userSchema = new mongoose.Schema(
       required: [true, 'Name is required'],
       trim: true,
     },
-    email: {
+    phone: {
       type: String,
-      required: [true, 'Email is required'],
+      required: [true, 'Phone is required'],
       unique: true,
       trim: true,
-      lowercase: true,
+    },
+    password: {
+      type: String,
+      required: [true, 'Password is required'],
+    },
+    schoolCode: {
+      type: String,
+      required: [true, 'School code is required'],
+      trim: true,
+      uppercase: true,
+    },
+    schoolName: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    role: {
+      type: String,
+      enum: ['student', 'teacher', 'principal', 'vendor'],
+      required: [true, 'Role is required'],
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
     },
   },
-  { timestamps: true }
+  { versionKey: false }
 );
 
 module.exports = mongoose.model('User', userSchema);
