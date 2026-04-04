@@ -744,17 +744,21 @@ exports.uploadExcel = async (req, res) => {
         if (!classSet.has(classKey)) classSet.set(classKey, fullClass);
       }
 
-      // Student name: try mapped 'studentName' field, then combine firstName + lastName
-      let studentName = cell(row, 'studentName');
-      if (!studentName) {
-        const firstName = cell(row, 'firstName');
-        const lastName  = cell(row, 'lastName');
-        if (firstName) studentName = `${firstName} ${lastName}`.trim();
-      }
-      if (studentName) {
+      // Student name: always try firstName + lastName first (most Excel files split them),
+      // then fall back to the studentName mapping if neither part is present.
+      const firstName = cell(row, 'firstName');
+      const lastName  = cell(row, 'lastName');
+      let studentName = (firstName || lastName)
+        ? `${firstName} ${lastName}`.trim()
+        : cell(row, 'studentName');
+
+      console.log(`[uploadExcel] Row student – firstName="${firstName}" lastName="${lastName}" resolved="${studentName}" class="${fullClass}"`);
+
+      // Push the student even when some fields are missing; only skip truly blank rows
+      if (studentName || fullClass) {
         studentList.push({
           type:        'student',
-          name:        studentName,
+          name:        studentName || 'Unknown',
           classOrDept: fullClass,
           phone:       cell(row, 'phone'),
           address:     cell(row, 'address'),
@@ -792,12 +796,17 @@ exports.uploadExcel = async (req, res) => {
           filter: s.phone
             ? { type: 'student', phone: s.phone, principalId }
             : { type: 'student', name: s.name, classOrDept: s.classOrDept, principalId },
-          update: { $setOnInsert: s },
+          update: {
+            $setOnInsert: { type: s.type, name: s.name, principalId },
+            $set: { classOrDept: s.classOrDept, phone: s.phone, address: s.address },
+          },
           upsert: true,
         },
       }));
       const r = await SchoolMember.bulkWrite(studentBulk, { ordered: false });
-      studentsAdded = r.upsertedCount;
+      // upsertedCount = truly new records; matchedCount = existing updated
+      studentsAdded = r.upsertedCount + (r.matchedCount || 0);
+      console.log(`[uploadExcel] students bulkWrite: upserted=${r.upsertedCount} matched=${r.matchedCount} total=${studentsAdded}`);
     }
 
     // ── Bulk upsert teachers ───────────────────────────────────────
