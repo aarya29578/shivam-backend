@@ -902,3 +902,47 @@ exports.debugSchoolData = async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 };
+
+/**
+ * GET /api/vendor/schools?vendorId=<id>&search=<query>
+ *
+ * Returns the list of schools (clients) this vendor has registered,
+ * optionally filtered by a search string (matches schoolName or schoolCode).
+ * Used by the Quick Capture Setup screen's school selector.
+ *
+ * Response: [ { id, name, code } ]
+ */
+exports.getVendorSchools = async (req, res) => {
+  try {
+    const { vendorId, search } = req.query;
+    if (!vendorId) {
+      return res.status(400).json({ error: 'vendorId is required.' });
+    }
+
+    const filter = { vendorId };
+
+    if (search && search.trim()) {
+      const regex = new RegExp(search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$or = [
+        { schoolName: regex },
+        { schoolCode: regex },
+      ];
+    }
+
+    const clients = await Client.find(filter)
+      .sort({ schoolName: 1 })
+      .select('schoolName schoolCode')
+      .lean();
+
+    return res.json(
+      clients.map(c => ({
+        id:   c._id.toString(),
+        name: c.schoolName,
+        code: c.schoolCode || '',
+      }))
+    );
+  } catch (err) {
+    console.error('[getVendorSchools]', err);
+    return res.status(500).json({ error: err.message || 'Failed to load schools.' });
+  }
+};

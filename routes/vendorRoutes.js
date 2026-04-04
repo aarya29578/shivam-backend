@@ -59,7 +59,10 @@ router.post('/orders/:id/files', uploadOrderFilesMiddleware, uploadOrderFiles);
 router.post('/upload-excel', uploadExcelMiddleware, uploadExcel);
 
 // GET /api/vendor/debug/school?clientId=<id>  – diagnostic counts
-const { debugSchoolData } = require('../controllers/vendorController');
+const { debugSchoolData, getVendorSchools } = require('../controllers/vendorController');
 router.get('/debug/school', debugSchoolData);
+
+// GET /api/vendor/schools?vendorId=<id>&search=<query>  – school selector for Quick Capture
+router.get('/schools', getVendorSchools);
 
 module.exports = router;

@@ -19,14 +19,26 @@ const userSchema = new mongoose.Schema(
     },
     schoolCode: {
       type: String,
-      required: [true, 'School code is required'],
+      required: function () {
+        return this.role !== 'vendor';
+      },
       trim: true,
       uppercase: true,
+      default: null,
     },
     schoolName: {
       type: String,
       trim: true,
       default: '',
+    },
+    vendorCode: {
+      type: String,
+      required: function () {
+        return this.role === 'vendor';
+      },
+      trim: true,
+      uppercase: true,
+      default: null,
     },
     role: {
       type: String,

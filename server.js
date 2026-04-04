@@ -87,6 +87,12 @@ mongoose
     } catch (_) {
       // Index doesn't exist – nothing to do.
     }
+    try {
+      await User.collection.dropIndex('schoolCode_1');
+      console.log('[Server] Dropped legacy schoolCode_1 index');
+    } catch (_) {
+      // Index doesn't exist – nothing to do.
+    }
 
     await User.syncIndexes();
     console.log('[Server] User indexes synced');

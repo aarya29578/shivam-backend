@@ -26,6 +26,15 @@ const orderSchema = new mongoose.Schema(
     clientId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Client', index: true },
     deliveryDate:   { type: Date },
     productType:    { type: String, trim: true },
+    files: [
+      {
+        originalName: { type: String },
+        filename:     { type: String },
+        path:         { type: String },
+        mimeType:     { type: String },
+        size:         { type: Number },
+      },
+    ],
   },
   { timestamps: true }
 );
