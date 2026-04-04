@@ -100,6 +100,18 @@ exports.createClient = async (req, res) => {
       phone,
       email,
       vendorId,
+      // Extended fields
+      clientType,
+      state,
+      district,
+      pincode,
+      deliveryMode,
+      busStop,
+      route,
+      gstNumber,
+      gstName,
+      gstStateCode,
+      gstAddress,
     } = req.body || {};
     if (!schoolName || !vendorId) {
       return res.status(400).json({ error: 'schoolName and vendorId are required.' });
@@ -122,27 +134,54 @@ exports.createClient = async (req, res) => {
       schoolName,
       vendorId,
       ...(safeSchoolCode && { schoolCode: safeSchoolCode }),
-      ...(address     && { address }),
-      ...(city        && { city }),
-      ...(contactName && { contactName }),
-      ...(phone       && { phone }),
-      ...(email       && { email }),
+      ...(address      && { address }),
+      ...(city         && { city }),
+      ...(contactName  && { contactName }),
+      ...(phone        && { phone }),
+      ...(email        && { email }),
+      ...(clientType   && { clientType }),
+      ...(state        && { state }),
+      ...(district     && { district }),
+      ...(pincode      && { pincode }),
+      ...(deliveryMode && { deliveryMode }),
+      ...(busStop      && { busStop }),
+      ...(route        && { route }),
+      ...(gstNumber    && { gstNumber }),
+      ...(gstName      && { gstName }),
+      ...(gstStateCode && { gstStateCode }),
+      ...(gstAddress   && { gstAddress }),
     });
-    return res.status(201).json({
-      id:          client._id,
-      schoolName:  client.schoolName,
-      schoolCode:  client.schoolCode || '',
-      city:        client.city        || '',
-      contactName: client.contactName || '',
-      phone:       client.phone       || '',
-      email:       client.email       || '',
-      address:     client.address     || '',
-    });
+    return res.status(201).json(_formatClient(client));
   } catch (err) {
     console.error('[createClient]', err);
     return res.status(500).json({ error: err.message || 'Failed to create client.' });
   }
 };
+
+function _formatClient(c) {
+  return {
+    id:           c._id,
+    schoolName:   c.schoolName,
+    schoolCode:   c.schoolCode   || '',
+    city:         c.city         || '',
+    contactName:  c.contactName  || '',
+    phone:        c.phone        || '',
+    email:        c.email        || '',
+    address:      c.address      || '',
+    clientType:   c.clientType   || '',
+    state:        c.state        || '',
+    district:     c.district     || '',
+    pincode:      c.pincode      || '',
+    deliveryMode: c.deliveryMode || '',
+    busStop:      c.busStop      || '',
+    route:        c.route        || '',
+    gstNumber:    c.gstNumber    || '',
+    gstName:      c.gstName      || '',
+    gstStateCode: c.gstStateCode || '',
+    gstAddress:   c.gstAddress   || '',
+    vendorId:     c.vendorId,
+  };
+}
 
 exports.deleteClient = async (req, res) => {
   try {
@@ -163,14 +202,30 @@ exports.deleteClient = async (req, res) => {
  */
 exports.updateClient = async (req, res) => {
   try {
-    const { schoolCode, contactName, phone, address, city, email } = req.body || {};
+    const {
+      schoolCode, contactName, phone, address, city, email,
+      clientType, state, district, pincode,
+      deliveryMode, busStop, route,
+      gstNumber, gstName, gstStateCode, gstAddress,
+    } = req.body || {};
     const patch = {};
-    if (schoolCode  !== undefined) patch.schoolCode  = normalizeSchoolCode(schoolCode);
-    if (contactName !== undefined) patch.contactName = (contactName || '').toString().trim();
-    if (phone       !== undefined) patch.phone       = (phone       || '').toString().trim();
-    if (address     !== undefined) patch.address     = (address     || '').toString().trim();
-    if (city        !== undefined) patch.city        = (city        || '').toString().trim();
-    if (email       !== undefined) patch.email       = (email       || '').toString().trim().toLowerCase();
+    if (schoolCode   !== undefined) patch.schoolCode   = normalizeSchoolCode(schoolCode);
+    if (contactName  !== undefined) patch.contactName  = (contactName  || '').toString().trim();
+    if (phone        !== undefined) patch.phone        = (phone        || '').toString().trim();
+    if (address      !== undefined) patch.address      = (address      || '').toString().trim();
+    if (city         !== undefined) patch.city         = (city         || '').toString().trim();
+    if (email        !== undefined) patch.email        = (email        || '').toString().trim().toLowerCase();
+    if (clientType   !== undefined) patch.clientType   = (clientType   || '').toString().trim();
+    if (state        !== undefined) patch.state        = (state        || '').toString().trim();
+    if (district     !== undefined) patch.district     = (district     || '').toString().trim();
+    if (pincode      !== undefined) patch.pincode      = (pincode      || '').toString().trim();
+    if (deliveryMode !== undefined) patch.deliveryMode = (deliveryMode || '').toString().trim();
+    if (busStop      !== undefined) patch.busStop      = (busStop      || '').toString().trim();
+    if (route        !== undefined) patch.route        = (route        || '').toString().trim();
+    if (gstNumber    !== undefined) patch.gstNumber    = (gstNumber    || '').toString().trim();
+    if (gstName      !== undefined) patch.gstName      = (gstName      || '').toString().trim();
+    if (gstStateCode !== undefined) patch.gstStateCode = (gstStateCode || '').toString().trim();
+    if (gstAddress   !== undefined) patch.gstAddress   = (gstAddress   || '').toString().trim();
 
     const updated = await Client.findByIdAndUpdate(
       req.params.id,
@@ -179,16 +234,7 @@ exports.updateClient = async (req, res) => {
     ).lean();
     if (!updated) return res.status(404).json({ error: 'Client not found.' });
     console.log(`[updateClient] id=${req.params.id} patch=${JSON.stringify(patch)}`);
-    return res.json({
-      id:          updated._id,
-      schoolName:  updated.schoolName,
-      schoolCode:  updated.schoolCode || '',
-      city:        updated.city        || '',
-      contactName: updated.contactName || '',
-      phone:       updated.phone       || '',
-      email:       updated.email       || '',
-      address:     updated.address     || '',
-    });
+    return res.json(_formatClient(updated));
   } catch (err) {
     console.error('[updateClient]', err);
     return res.status(500).json({ error: 'Failed to update client.' });
@@ -204,18 +250,7 @@ exports.getVendorClients = async (req, res) => {
     const clients = await Client.find({ vendorId })
       .sort({ createdAt: -1 })
       .lean();
-    return res.json(
-      clients.map(c => ({
-        id:          c._id,
-        schoolName:  c.schoolName,
-        schoolCode:  c.schoolCode || '',
-        city:        c.city        || '',
-        contactName: c.contactName || '',
-        phone:       c.phone       || '',
-        email:       c.email       || '',
-        address:     c.address     || '',
-      }))
-    );
+    return res.json(clients.map(_formatClient));
   } catch (err) {
     console.error('[getVendorClients]', err);
     return res.status(500).json({ error: 'Failed to load clients.' });
@@ -269,7 +304,7 @@ exports.createOrder = async (req, res) => {
     const {
       title, clientId, schoolName, stage, progress,
       totalCards, completedCards, deliveryDate, productType, vendorId,
-      productName, pricing,
+      productName, pricing, description, youtubeLink, instagramLink, videoUrl,
     } = req.body;
 
     if (!title || !schoolName || !vendorId) {
@@ -286,9 +321,13 @@ exports.createOrder = async (req, res) => {
       vendorId,
       ...(clientId    && { clientId }),
       ...(deliveryDate && { deliveryDate: new Date(deliveryDate) }),
-      ...(productType  && { productType }),
-      ...(productName  && { productName }),
-      ...(pricing      && { pricing }),
+      ...(productType   && { productType }),
+      ...(productName   && { productName }),
+      ...(pricing       && { pricing }),
+      ...(description   && { description }),
+      ...(youtubeLink   && { youtubeLink }),
+      ...(instagramLink && { instagramLink }),
+      ...(videoUrl      && { videoUrl }),
     });
 
     return res.status(201).json({
@@ -313,17 +352,7 @@ exports.getVendorClientById = async (req, res) => {
   try {
     const client = await Client.findById(req.params.id).lean();
     if (!client) return res.status(404).json({ error: 'Client not found.' });
-    return res.json({
-      id:          client._id,
-      schoolName:  client.schoolName,
-      schoolCode:  client.schoolCode || '',
-      address:     client.address     || '',
-      city:        client.city        || '',
-      contactName: client.contactName || '',
-      phone:       client.phone       || '',
-      email:       client.email       || '',
-      vendorId:    client.vendorId,
-    });
+    return res.json(_formatClient(client));
   } catch (err) {
     console.error('[getVendorClientById]', err);
     return res.status(500).json({ error: 'Failed to load client.' });

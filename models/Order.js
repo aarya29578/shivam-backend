@@ -33,6 +33,10 @@ const orderSchema = new mongoose.Schema(
       staff:   { type: Number, min: 0, default: 0 },
       other:   { type: Number, min: 0, default: 0 },
     },
+    description:    { type: String, trim: true },
+    youtubeLink:    { type: String, trim: true },
+    instagramLink:  { type: String, trim: true },
+    videoUrl:       { type: String, trim: true },
     files: [
       {
         originalName: { type: String },
