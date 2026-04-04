@@ -463,10 +463,11 @@ exports.uploadOrderFiles = async (req, res) => {
       return res.status(400).json({ error: 'No files received.' });
     }
 
+    const _serverBase = (process.env.SERVER_BASE_URL || 'http://72.62.241.170').replace(/\/$/, '');
     const newEntries = req.files.map((f) => ({
       originalName: f.originalname,
       filename:     f.filename,
-      path:         `/uploads/order-files/${f.filename}`,
+      path:         `${_serverBase}/uploads/order-files/${f.filename}`,
       mimeType:     f.mimetype,
       size:         f.size,
     }));

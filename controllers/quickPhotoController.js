@@ -3,6 +3,9 @@ const fs   = require('fs');
 const multer = require('multer');
 const QuickPhoto = require('../models/QuickPhoto');
 
+const _baseUrl = () =>
+  (process.env.SERVER_BASE_URL || 'http://72.62.241.170').replace(/\/$/, '');
+
 // ── Upload directory ────────────────────────────────────────────────
 const uploadsDir = path.join(__dirname, '..', 'uploads', 'quick-photos');
 if (!fs.existsSync(uploadsDir)) {
@@ -48,7 +51,7 @@ exports.uploadQuickPhoto = async (req, res) => {
     }
 
     const padded   = String(rollNumber).padStart(3, '0');
-    const imageUrl = `/uploads/quick-photos/${req.file.filename}`;
+    const imageUrl = `${_baseUrl()}/uploads/quick-photos/${req.file.filename}`;
 
     const photo = await QuickPhoto.create({
       schoolCode: schoolCode.trim(),
