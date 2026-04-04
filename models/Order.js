@@ -26,6 +26,13 @@ const orderSchema = new mongoose.Schema(
     clientId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Client', index: true },
     deliveryDate:   { type: Date },
     productType:    { type: String, trim: true },
+    productName:    { type: String, trim: true },
+    pricing: {
+      student: { type: Number, min: 0, default: 0 },
+      teacher: { type: Number, min: 0, default: 0 },
+      staff:   { type: Number, min: 0, default: 0 },
+      other:   { type: Number, min: 0, default: 0 },
+    },
     files: [
       {
         originalName: { type: String },

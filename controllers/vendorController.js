@@ -269,6 +269,7 @@ exports.createOrder = async (req, res) => {
     const {
       title, clientId, schoolName, stage, progress,
       totalCards, completedCards, deliveryDate, productType, vendorId,
+      productName, pricing,
     } = req.body;
 
     if (!title || !schoolName || !vendorId) {
@@ -286,6 +287,8 @@ exports.createOrder = async (req, res) => {
       ...(clientId    && { clientId }),
       ...(deliveryDate && { deliveryDate: new Date(deliveryDate) }),
       ...(productType  && { productType }),
+      ...(productName  && { productName }),
+      ...(pricing      && { pricing }),
     });
 
     return res.status(201).json({
