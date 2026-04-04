@@ -609,7 +609,6 @@ exports.uploadExcel = async (req, res) => {
       phone:       ['phone', 'mobile', 'fathermobno', 'fathermobile', 'mob', 'mobileno', 'phoneno', 'contact', 'fatherno'],
       address:     ['address', 'addr'],
       teacherName: ['teachername', 'teacher'],
-      schoolCode:  ['schoolcode', 'scode', 'school_code', 'schoolid'],
     };
 
     // Helper: cell value — mapped field first, then raw-column fallback
@@ -626,54 +625,34 @@ exports.uploadExcel = async (req, res) => {
     const dataRows = rows.slice(1).filter(r => r.some(c => (c || '').toString().trim()));
     console.log('[uploadExcel] Data rows:', dataRows.length);
 
-    // ── Resolve principalId ────────────────────────────────────────
+    // ── Resolve principalId from the SELECTED client only ─────────
+    // Never trust the Excel file's schoolCode column — always use
+    // the school the vendor explicitly selected in the UI.
     const client = await Client.findById(clientId).lean();
     if (!client) return res.status(404).json({ error: 'Client not found.' });
 
-    let principalId = null;
+    const selectedSchoolCode = (client.schoolCode || '').toUpperCase();
+    console.log(`[uploadExcel] Saving for school: ${selectedSchoolCode} (clientId=${clientId})`);
 
-    // 1. Try schoolCode stored on the Client record
-    if (client.schoolCode) {
-      const principal = await User.findOne({
-        role: 'principal',
-        schoolCode: client.schoolCode.toUpperCase(),
-      }).select('_id').lean();
-      if (principal) principalId = principal._id.toString();
-      console.log(`[uploadExcel] client.schoolCode=${client.schoolCode} → principalId=${principalId}`);
+    if (!selectedSchoolCode) {
+      return res.status(422).json({
+        error: 'The selected client has no school code. Please update the client and add a school code first.',
+      });
     }
 
-    // 2. Try schoolCode from the first data row of the Excel file
-    if (!principalId && dataRows.length > 0) {
-      const csvSchoolCode = cell(dataRows[0], 'schoolCode');
-      if (csvSchoolCode) {
-        const principal = await User.findOne({
-          role: 'principal',
-          schoolCode: csvSchoolCode.toUpperCase(),
-        }).select('_id').lean();
-        if (principal) principalId = principal._id.toString();
-        console.log(`[uploadExcel] CSV schoolCode=${csvSchoolCode} → principalId=${principalId}`);
-      }
+    const principalUser = await User.findOne({
+      role: 'principal',
+      schoolCode: selectedSchoolCode,
+    }).select('_id').lean();
+
+    if (!principalUser) {
+      return res.status(422).json({
+        error: `No principal account found for school code "${selectedSchoolCode}". Please ensure the principal is registered first.`,
+      });
     }
 
-    // 3. Last resort: scan ALL rows for a non-empty schoolCode
-    if (!principalId) {
-      for (const row of dataRows) {
-        const sc = cell(row, 'schoolCode');
-        if (sc) {
-          const principal = await User.findOne({
-            role: 'principal',
-            schoolCode: sc.toUpperCase(),
-          }).select('_id').lean();
-          if (principal) { principalId = principal._id.toString(); break; }
-        }
-      }
-      if (principalId) console.log(`[uploadExcel] Found principalId from CSV rows: ${principalId}`);
-    }
-
-    if (!principalId) {
-      console.warn(`[uploadExcel] ⚠️  Could not resolve principalId for clientId=${clientId}. Data will be stored under clientId.`);
-      principalId = clientId;
-    }
+    const principalId = principalUser._id.toString();
+    console.log(`[uploadExcel] principalId resolved: ${principalId}`);
 
     // ── Build data sets ────────────────────────────────────────────
     const classSet     = new Map(); // key → { name, principalId }
