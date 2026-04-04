@@ -577,7 +577,11 @@ exports.uploadExcel = async (req, res) => {
 
     // Build column-index lookup from first row (headers)
     const headerRow = rows[0].map(h => (h || '').toString().trim());
-    const colIndex  = {};
+    console.log('[uploadExcel] Headers:', headerRow);
+    console.log('[uploadExcel] Mapping:', mapping);
+
+    // Mapped field → column index (from user-provided mapping)
+    const colIndex = {};
     for (const [fieldKey, excelColName] of Object.entries(mapping)) {
       if (!excelColName) continue;
       const idx = headerRow.findIndex(
@@ -586,14 +590,40 @@ exports.uploadExcel = async (req, res) => {
       if (idx !== -1) colIndex[fieldKey] = idx;
     }
 
-    const dataRows = rows.slice(1).filter(r => r.some(c => (c || '').toString().trim()));
+    // Raw column name (lowercased, stripped) → index — used as fallback
+    const rawIdx = {};
+    headerRow.forEach((h, i) => {
+      if (h) rawIdx[h.toLowerCase().replace(/[\s_]/g, '')] = i;
+    });
 
-    // Helper: safe cell value
-    const cell = (row, key) => {
-      const idx = colIndex[key];
-      if (idx === undefined || idx === -1) return '';
-      return (row[idx] || '').toString().trim();
+    // Common raw column name aliases for each semantic field
+    const _fallbacks = {
+      studentName: ['studentname', 'student'],
+      firstName:   ['firstname', 'first', 'fname'],
+      lastName:    ['lastname', 'last', 'lname', 'surname'],
+      className:   ['classname', 'class', 'grade', 'std', 'standard'],
+      section:     ['section', 'sec'],
+      rollNumber:  ['rollnumber', 'rollno', 'roll', 'admno', 'admissionno', 'srno', 'sr', 'regno', 'reg'],
+      dob:         ['dob', 'dateofbirth', 'birthdate', 'birth', 'birthdt'],
+      parentName:  ['parentname', 'fathername', 'father', 'guardian', 'parent'],
+      phone:       ['phone', 'mobile', 'fathermobno', 'fathermobile', 'mob', 'mobileno', 'phoneno', 'contact', 'fatherno'],
+      address:     ['address', 'addr'],
+      teacherName: ['teachername', 'teacher'],
     };
+
+    // Helper: cell value — mapped field first, then raw-column fallback
+    const cell = (row, key) => {
+      if (colIndex[key] !== undefined) {
+        return (row[colIndex[key]] || '').toString().trim();
+      }
+      for (const fb of (_fallbacks[key] || [])) {
+        if (rawIdx[fb] !== undefined) return (row[rawIdx[fb]] || '').toString().trim();
+      }
+      return '';
+    };
+
+    const dataRows = rows.slice(1).filter(r => r.some(c => (c || '').toString().trim()));
+    console.log('[uploadExcel] Data rows:', dataRows.length);
 
     // ── Resolve principalId ────────────────────────────────────────
     const client = await Client.findById(clientId).lean();
@@ -626,7 +656,13 @@ exports.uploadExcel = async (req, res) => {
         if (!classSet.has(classKey)) classSet.set(classKey, fullClass);
       }
 
-      const studentName = cell(row, 'studentName');
+      // Student name: try mapped 'studentName' field, then combine firstName + lastName
+      let studentName = cell(row, 'studentName');
+      if (!studentName) {
+        const firstName = cell(row, 'firstName');
+        const lastName  = cell(row, 'lastName');
+        if (firstName) studentName = `${firstName} ${lastName}`.trim();
+      }
       if (studentName) {
         studentList.push({
           type:        'student',
