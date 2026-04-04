@@ -156,6 +156,45 @@ exports.deleteClient = async (req, res) => {
   }
 };
 
+/**
+ * PATCH /api/vendor/clients/:id
+ *
+ * Updates editable fields on a client (schoolCode, contactName, phone, address, city, email).
+ */
+exports.updateClient = async (req, res) => {
+  try {
+    const { schoolCode, contactName, phone, address, city, email } = req.body || {};
+    const patch = {};
+    if (schoolCode  !== undefined) patch.schoolCode  = normalizeSchoolCode(schoolCode);
+    if (contactName !== undefined) patch.contactName = (contactName || '').toString().trim();
+    if (phone       !== undefined) patch.phone       = (phone       || '').toString().trim();
+    if (address     !== undefined) patch.address     = (address     || '').toString().trim();
+    if (city        !== undefined) patch.city        = (city        || '').toString().trim();
+    if (email       !== undefined) patch.email       = (email       || '').toString().trim().toLowerCase();
+
+    const updated = await Client.findByIdAndUpdate(
+      req.params.id,
+      { $set: patch },
+      { new: true }
+    ).lean();
+    if (!updated) return res.status(404).json({ error: 'Client not found.' });
+    console.log(`[updateClient] id=${req.params.id} patch=${JSON.stringify(patch)}`);
+    return res.json({
+      id:          updated._id,
+      schoolName:  updated.schoolName,
+      schoolCode:  updated.schoolCode || '',
+      city:        updated.city        || '',
+      contactName: updated.contactName || '',
+      phone:       updated.phone       || '',
+      email:       updated.email       || '',
+      address:     updated.address     || '',
+    });
+  } catch (err) {
+    console.error('[updateClient]', err);
+    return res.status(500).json({ error: 'Failed to update client.' });
+  }
+};
+
 exports.getVendorClients = async (req, res) => {
   try {
     const { vendorId } = req.query;

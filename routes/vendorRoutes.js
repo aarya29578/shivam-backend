@@ -10,6 +10,7 @@ const {
   getClientSchoolSummary,
   createOrder,
   createClient,
+  updateClient,
   deleteClient,
   advanceOrderStage,
   uploadOrderFiles,
@@ -35,6 +36,9 @@ router.post('/clients', createClient);
 
 // GET  /api/vendor/clients/:id
 router.get('/clients/:id', getVendorClientById);
+
+// PATCH /api/vendor/clients/:id
+router.patch('/clients/:id', updateClient);
 
 // GET  /api/vendor/clients/:id/school-summary
 router.get('/clients/:id/school-summary', getClientSchoolSummary);
