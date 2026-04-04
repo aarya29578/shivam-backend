@@ -798,7 +798,7 @@ exports.uploadExcel = async (req, res) => {
             : { type: 'student', name: s.name, classOrDept: s.classOrDept, principalId },
           update: {
             $setOnInsert: { type: s.type, name: s.name, principalId },
-            $set: { classOrDept: s.classOrDept, phone: s.phone, address: s.address },
+            $set: { type: s.type, classOrDept: s.classOrDept, phone: s.phone, address: s.address },
           },
           upsert: true,
         },
@@ -841,5 +841,64 @@ exports.uploadExcel = async (req, res) => {
     console.error('[uploadExcel]', err);
     if (filePath) fs.unlink(filePath, () => {});
     return res.status(500).json({ error: 'Failed to process Excel file.' });
+  }
+};
+
+/**
+ * GET /api/vendor/debug/school?clientId=<id>
+ * Diagnostic endpoint – returns raw DB counts for the school linked to a client.
+ */
+exports.debugSchoolData = async (req, res) => {
+  try {
+    const { clientId } = req.query;
+    if (!clientId) return res.status(400).json({ error: 'clientId required' });
+
+    const Client      = require('../models/Client');
+    const SchoolClass  = require('../models/SchoolClass');
+    const SchoolMember = require('../models/SchoolMember');
+    const User         = require('../models/User');
+
+    const client = await Client.findById(clientId).lean();
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+
+    const schoolCode = (client.schoolCode || '').toUpperCase();
+    const principal  = schoolCode
+      ? await User.findOne({ role: 'principal', schoolCode }).select('_id schoolCode name').lean()
+      : null;
+
+    const principalId = principal ? principal._id.toString() : null;
+
+    const memberBreakdown = principalId
+      ? await SchoolMember.aggregate([
+          { $match: { principalId } },
+          { $group: { _id: '$type', count: { $sum: 1 } } },
+        ])
+      : [];
+
+    const classCount = principalId
+      ? await SchoolClass.countDocuments({ principalId })
+      : 0;
+
+    const sampleStudents = principalId
+      ? await SchoolMember.find({ principalId, type: 'student' }).limit(3).select('name classOrDept phone principalId type').lean()
+      : [];
+
+    const sampleWithoutType = principalId
+      ? await SchoolMember.find({ principalId, type: { $exists: false } }).limit(3).lean()
+      : [];
+
+    return res.json({
+      clientSchoolCode: client.schoolCode,
+      normalizedSchoolCode: schoolCode,
+      principal: principal ? { id: principal._id, name: principal.name, schoolCode: principal.schoolCode } : null,
+      principalId,
+      classCount,
+      memberBreakdown,
+      sampleStudents,
+      sampleWithoutType,
+    });
+  } catch (err) {
+    console.error('[debugSchoolData]', err);
+    return res.status(500).json({ error: err.message });
   }
 };

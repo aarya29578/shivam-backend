@@ -58,4 +58,8 @@ router.post('/orders/:id/files', uploadOrderFilesMiddleware, uploadOrderFiles);
 // POST /api/vendor/upload-excel  – parse Excel and auto-ingest classes/students/teachers
 router.post('/upload-excel', uploadExcelMiddleware, uploadExcel);
 
+// GET /api/vendor/debug/school?clientId=<id>  – diagnostic counts
+const { debugSchoolData } = require('../controllers/vendorController');
+router.get('/debug/school', debugSchoolData);
+
 module.exports = router;
