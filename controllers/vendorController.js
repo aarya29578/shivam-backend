@@ -1,5 +1,61 @@
-const Client = require('../models/Client');
-const Order  = require('../models/Order');
+const Client       = require('../models/Client');
+const Order        = require('../models/Order');
+const User         = require('../models/User');
+const SchoolClass  = require('../models/SchoolClass');
+const SchoolMember = require('../models/SchoolMember');
+const path         = require('path');
+const fs           = require('fs');
+const multer       = require('multer');
+const XLSX         = require('xlsx');
+
+// ── Order-file upload (multer) ──────────────────────────────────────
+const orderFilesDir = path.join(__dirname, '..', 'uploads', 'order-files');
+if (!fs.existsSync(orderFilesDir)) fs.mkdirSync(orderFilesDir, { recursive: true });
+
+const _orderFileStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, orderFilesDir),
+  filename: (_req, file, cb) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
+    const ext    = path.extname(file.originalname);
+    cb(null, `${unique}${ext}`);
+  },
+});
+
+const _orderFileUpload = multer({
+  storage: _orderFileStorage,
+  limits:  { fileSize: 50 * 1024 * 1024 }, // 50 MB per file
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'application/pdf',
+      'application/postscript',           // .ai / .eps
+      'image/vnd.adobe.photoshop',        // .psd
+      'image/svg+xml',                    // .svg
+      'application/msword',               // .doc
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      'application/vnd.ms-excel',                                               // .xls
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',      // .xlsx
+    ];
+    // also allow by extension for CDR and other design files
+    const ext = path.extname(file.originalname).toLowerCase();
+    const allowedExts = ['.cdr', '.ai', '.psd', '.eps', '.svg'];
+    if (allowed.includes(file.mimetype) || allowedExts.includes(ext)) {
+      return cb(null, true);
+    }
+    cb(new Error(`File type not allowed: ${file.mimetype}`));
+  },
+});
+
+/** Middleware - attach to route before uploadOrderFiles */
+exports.uploadOrderFilesMiddleware = _orderFileUpload.array('files', 20);
+
+function normalizeVendorCode(value) {
+  return (value || '').toString().trim().toUpperCase();
+}
+
+function normalizeSchoolCode(value) {
+  return (value || '').toString().trim().toUpperCase();
+}
 
 /**
  * GET /api/vendor/dashboard
@@ -35,13 +91,37 @@ const Order  = require('../models/Order');
  */
 exports.createClient = async (req, res) => {
   try {
-    const { schoolName, address, city, contactName, phone, email, vendorId } = req.body || {};
+    const {
+      schoolName,
+      schoolCode,
+      address,
+      city,
+      contactName,
+      phone,
+      email,
+      vendorId,
+    } = req.body || {};
     if (!schoolName || !vendorId) {
       return res.status(400).json({ error: 'schoolName and vendorId are required.' });
     }
+    const safeSchoolCode = normalizeSchoolCode(schoolCode);
+
+    if (safeSchoolCode) {
+      const existingByCode = await Client.findOne({
+        vendorId,
+        schoolCode: safeSchoolCode,
+      }).lean();
+      if (existingByCode) {
+        return res.status(409).json({
+          error: 'This school code is already linked to your account.',
+        });
+      }
+    }
+
     const client = await Client.create({
       schoolName,
       vendorId,
+      ...(safeSchoolCode && { schoolCode: safeSchoolCode }),
       ...(address     && { address }),
       ...(city        && { city }),
       ...(contactName && { contactName }),
@@ -51,6 +131,7 @@ exports.createClient = async (req, res) => {
     return res.status(201).json({
       id:          client._id,
       schoolName:  client.schoolName,
+      schoolCode:  client.schoolCode || '',
       city:        client.city        || '',
       contactName: client.contactName || '',
       phone:       client.phone       || '',
@@ -88,6 +169,7 @@ exports.getVendorClients = async (req, res) => {
       clients.map(c => ({
         id:          c._id,
         schoolName:  c.schoolName,
+        schoolCode:  c.schoolCode || '',
         city:        c.city        || '',
         contactName: c.contactName || '',
         phone:       c.phone       || '',
@@ -192,6 +274,7 @@ exports.getVendorClientById = async (req, res) => {
     return res.json({
       id:          client._id,
       schoolName:  client.schoolName,
+      schoolCode:  client.schoolCode || '',
       address:     client.address     || '',
       city:        client.city        || '',
       contactName: client.contactName || '',
@@ -258,12 +341,80 @@ exports.advanceOrderStage = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/vendor/orders/:id/files
+ *
+ * Attaches uploaded files to an existing order.
+ * Accepts multipart/form-data with field name "files" (up to 20 files).
+ */
+exports.uploadOrderFiles = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files received.' });
+    }
+
+    const newEntries = req.files.map((f) => ({
+      originalName: f.originalname,
+      filename:     f.filename,
+      path:         `/uploads/order-files/${f.filename}`,
+      mimeType:     f.mimetype,
+      size:         f.size,
+    }));
+
+    order.files.push(...newEntries);
+    await order.save();
+
+    return res.status(201).json({
+      orderId:  order._id,
+      uploaded: newEntries.length,
+      files:    newEntries,
+    });
+  } catch (err) {
+    console.error('[uploadOrderFiles]', err);
+    return res.status(500).json({ error: 'Failed to upload files.' });
+  }
+};
+
 exports.getVendorDashboard = async (req, res) => {
   try {
-    const { vendorId } = req.query;
+    const rawVendorId = (req.query.vendorId || '').toString().trim();
+    let vendorCode = normalizeVendorCode(req.query.vendorCode);
 
-    if (!vendorId) {
-      return res.status(400).json({ error: 'vendorId query parameter is required.' });
+    if (!rawVendorId && !vendorCode) {
+      return res.status(400).json({
+        error: 'vendorId or vendorCode query parameter is required.',
+      });
+    }
+
+    let vendorId = rawVendorId;
+
+    // Allow dashboard lookup by vendorCode when vendorId is not available.
+    if (!vendorId && vendorCode) {
+      const vendorUser = await User.findOne({
+        role: 'vendor',
+        vendorCode,
+      })
+        .select('_id vendorCode')
+        .lean();
+
+      if (!vendorUser) {
+        return res.status(404).json({ error: 'Vendor not found for provided vendorCode.' });
+      }
+
+      vendorId = vendorUser._id.toString();
+      vendorCode = normalizeVendorCode(vendorUser.vendorCode);
+    }
+
+    // Resolve vendorCode from vendor profile when vendorId is available.
+    const isObjectId = /^[a-f\d]{24}$/i.test(vendorId);
+    if (!vendorCode && isObjectId) {
+      const vendorUser = await User.findById(vendorId)
+        .select('vendorCode')
+        .lean();
+      vendorCode = normalizeVendorCode(vendorUser?.vendorCode);
     }
 
     // Build start-of-today boundary (UTC midnight)
@@ -271,7 +422,14 @@ exports.getVendorDashboard = async (req, res) => {
     todayStart.setUTCHours(0, 0, 0, 0);
 
     // Run all queries in parallel for performance
-    const [totalClients, activeOrders, cardsTodayResult, activeProjects, schools] =
+    const [
+      totalClients,
+      activeOrders,
+      cardsTodayResult,
+      activeProjects,
+      schools,
+      linkedPrincipalSchools,
+    ] =
       await Promise.all([
         // 1. Total clients for this vendor
         Client.countDocuments({ vendorId }),
@@ -306,20 +464,248 @@ exports.getVendorDashboard = async (req, res) => {
         Client.find({ vendorId })
           .sort({ createdAt: -1 })
           .select('schoolName city -_id'),
+
+        // 6. Schools linked by principal vendorCode
+        vendorCode
+          ? User.find({ role: 'principal', vendorCode })
+              .select('schoolName schoolCode -_id')
+              .lean()
+          : Promise.resolve([]),
       ]);
 
     const cardsToday =
       cardsTodayResult.length > 0 ? cardsTodayResult[0].total : 0;
+
+    // Merge schools from vendor clients and principal-vendor linkage.
+    const mergedSchools = [];
+    const seenSchools = new Set();
+
+    for (const s of schools) {
+      const schoolName = (s.schoolName || '').toString().trim();
+      const city = (s.city || '').toString().trim();
+      const key = schoolName.toLowerCase();
+      if (!schoolName || seenSchools.has(key)) continue;
+      seenSchools.add(key);
+      mergedSchools.push({ schoolName, city });
+    }
+
+    for (const p of linkedPrincipalSchools) {
+      const schoolName =
+        (p.schoolName || p.schoolCode || '').toString().trim();
+      const key = schoolName.toLowerCase();
+      if (!schoolName || seenSchools.has(key)) continue;
+      seenSchools.add(key);
+      mergedSchools.push({ schoolName, city: '' });
+    }
 
     return res.json({
       totalClients,
       activeOrders,
       cardsToday,
       activeProjects,
-      schools,
+      schools: mergedSchools,
     });
   } catch (err) {
     console.error('[getVendorDashboard]', err);
     return res.status(500).json({ error: 'Failed to load dashboard data.' });
+  }
+};
+
+// ── Excel Upload + Auto-Ingest ───────────────────────────────────────────────
+
+const excelUploadDir = path.join(__dirname, '..', 'uploads', 'excel-imports');
+if (!fs.existsSync(excelUploadDir)) fs.mkdirSync(excelUploadDir, { recursive: true });
+
+const _excelUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, excelUploadDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e6)}${ext}`);
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (['.xlsx', '.xls', '.csv'].includes(ext)) return cb(null, true);
+    cb(new Error('Only .xlsx, .xls, .csv files are allowed'));
+  },
+});
+
+exports.uploadExcelMiddleware = _excelUpload.single('file');
+
+/**
+ * POST /api/vendor/upload-excel
+ *
+ * multipart/form-data fields:
+ *   file      – the Excel / CSV file
+ *   mapping   – JSON: { studentName: "colA", className: "colB", ... }
+ *   vendorId  – string
+ *   clientId  – string (MongoDB _id of Client record)
+ *
+ * Flow:
+ *  1. Parse Excel rows using the provided column mapping
+ *  2. Resolve principalId via clientId → Client.schoolCode → User(principal)
+ *  3. Bulk-upsert classes (unique: name + principalId)
+ *  4. Bulk-upsert students (unique: phone + principalId, fallback: name+class)
+ *  5. Bulk-upsert teachers (if teacherName column mapped, unique: name+principalId)
+ *  6. Return summary { classesCreated, studentsAdded, teachersAdded }
+ */
+exports.uploadExcel = async (req, res) => {
+  const filePath = req.file?.path;
+  try {
+    const { vendorId, clientId } = req.body || {};
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+    if (!clientId) return res.status(400).json({ error: 'clientId is required.' });
+
+    // Parse mapping
+    let mapping = {};
+    try {
+      mapping = JSON.parse(req.body.mapping || '{}');
+    } catch {
+      return res.status(400).json({ error: 'Invalid mapping JSON.' });
+    }
+
+    // ── Parse Excel / CSV ──────────────────────────────────────────
+    const workbook = XLSX.readFile(filePath);
+    const sheet    = workbook.Sheets[workbook.SheetNames[0]];
+    // header:1 → first row as header, defval:'', raw:false → all strings
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+    if (rows.length < 2) {
+      return res.status(422).json({ error: 'File has no data rows.' });
+    }
+
+    // Build column-index lookup from first row (headers)
+    const headerRow = rows[0].map(h => (h || '').toString().trim());
+    const colIndex  = {};
+    for (const [fieldKey, excelColName] of Object.entries(mapping)) {
+      if (!excelColName) continue;
+      const idx = headerRow.findIndex(
+        h => h.toLowerCase() === (excelColName || '').toLowerCase()
+      );
+      if (idx !== -1) colIndex[fieldKey] = idx;
+    }
+
+    const dataRows = rows.slice(1).filter(r => r.some(c => (c || '').toString().trim()));
+
+    // Helper: safe cell value
+    const cell = (row, key) => {
+      const idx = colIndex[key];
+      if (idx === undefined || idx === -1) return '';
+      return (row[idx] || '').toString().trim();
+    };
+
+    // ── Resolve principalId ────────────────────────────────────────
+    const client = await Client.findById(clientId).lean();
+    if (!client) return res.status(404).json({ error: 'Client not found.' });
+
+    let principalId = null;
+    if (client.schoolCode) {
+      const principal = await User.findOne({
+        role: 'principal',
+        schoolCode: client.schoolCode.toUpperCase(),
+      }).select('_id').lean();
+      if (principal) principalId = principal._id.toString();
+    }
+
+    // Fallback: use clientId itself as principalId so data is always stored
+    if (!principalId) principalId = clientId;
+
+    // ── Build data sets ────────────────────────────────────────────
+    const classSet     = new Map(); // key → { name, principalId }
+    const studentList  = [];       // { type, name, classOrDept, phone, ... }
+    const teacherMap   = new Map(); // teacherName → Set of classes
+
+    for (const row of dataRows) {
+      const className  = cell(row, 'className');
+      const section    = cell(row, 'section');
+      const fullClass  = section ? `${className} - ${section}` : className;
+
+      if (className) {
+        const classKey = fullClass.toLowerCase();
+        if (!classSet.has(classKey)) classSet.set(classKey, fullClass);
+      }
+
+      const studentName = cell(row, 'studentName');
+      if (studentName) {
+        studentList.push({
+          type:        'student',
+          name:        studentName,
+          classOrDept: fullClass,
+          phone:       cell(row, 'phone'),
+          address:     cell(row, 'address'),
+          principalId,
+        });
+      }
+
+      const teacherName = cell(row, 'teacherName');
+      if (teacherName) {
+        if (!teacherMap.has(teacherName)) teacherMap.set(teacherName, new Set());
+        if (fullClass) teacherMap.get(teacherName).add(fullClass);
+      }
+    }
+
+    // ── Bulk upsert classes ────────────────────────────────────────
+    let classesCreated = 0;
+    const classBulk = [...classSet.values()].map(name => ({
+      updateOne: {
+        filter: { name, principalId },
+        update: { $setOnInsert: { name, principalId } },
+        upsert: true,
+      },
+    }));
+    if (classBulk.length) {
+      const r = await SchoolClass.bulkWrite(classBulk, { ordered: false });
+      classesCreated = r.upsertedCount;
+    }
+
+    // ── Bulk upsert students ───────────────────────────────────────
+    let studentsAdded = 0;
+    if (studentList.length) {
+      const studentBulk = studentList.map(s => ({
+        updateOne: {
+          filter: s.phone
+            ? { type: 'student', phone: s.phone, principalId }
+            : { type: 'student', name: s.name, classOrDept: s.classOrDept, principalId },
+          update: { $setOnInsert: s },
+          upsert: true,
+        },
+      }));
+      const r = await SchoolMember.bulkWrite(studentBulk, { ordered: false });
+      studentsAdded = r.upsertedCount;
+    }
+
+    // ── Bulk upsert teachers ───────────────────────────────────────
+    let teachersAdded = 0;
+    if (teacherMap.size) {
+      const teacherBulk = [...teacherMap.entries()].map(([name, classes]) => {
+        const classOrDept = [...classes].join(', ');
+        return {
+          updateOne: {
+            filter: { type: 'teacher', name, principalId },
+            update: { $setOnInsert: { type: 'teacher', name, classOrDept, principalId } },
+            upsert: true,
+          },
+        };
+      });
+      const r = await SchoolMember.bulkWrite(teacherBulk, { ordered: false });
+      teachersAdded = r.upsertedCount;
+    }
+
+    // Clean up temp file
+    fs.unlink(filePath, () => {});
+
+    console.log(`[uploadExcel] clientId=${clientId} principalId=${principalId} classes=${classesCreated} students=${studentsAdded} teachers=${teachersAdded}`);
+    return res.json({
+      success: true,
+      classesCreated,
+      studentsAdded,
+      teachersAdded,
+      totalRows: dataRows.length,
+    });
+  } catch (err) {
+    console.error('[uploadExcel]', err);
+    if (filePath) fs.unlink(filePath, () => {});
+    return res.status(500).json({ error: 'Failed to process Excel file.' });
   }
 };

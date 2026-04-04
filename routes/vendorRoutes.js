@@ -11,6 +11,10 @@ const {
   createClient,
   deleteClient,
   advanceOrderStage,
+  uploadOrderFiles,
+  uploadOrderFilesMiddleware,
+  uploadExcel,
+  uploadExcelMiddleware,
 } = require('../controllers/vendorController');
 
 // GET  /api/vendor/dashboard?vendorId=<id>
@@ -39,5 +43,11 @@ router.delete('/clients/:id', deleteClient);
 
 // PATCH /api/vendor/orders/:id/advance  – move order to next stage
 router.patch('/orders/:id/advance', advanceOrderStage);
+
+// POST /api/vendor/orders/:id/files  – attach files to an existing order
+router.post('/orders/:id/files', uploadOrderFilesMiddleware, uploadOrderFiles);
+
+// POST /api/vendor/upload-excel  – parse Excel and auto-ingest classes/students/teachers
+router.post('/upload-excel', uploadExcelMiddleware, uploadExcel);
 
 module.exports = router;
