@@ -289,6 +289,42 @@ exports.getVendorClientById = async (req, res) => {
 };
 
 /**
+ * GET /api/vendor/clients/:id/school-summary
+ *
+ * Returns class / student / teacher counts for the school linked
+ * to this client (via client.schoolCode → principal User).
+ */
+exports.getClientSchoolSummary = async (req, res) => {
+  try {
+    const client = await Client.findById(req.params.id).lean();
+    if (!client) return res.status(404).json({ error: 'Client not found.' });
+
+    const schoolCode = (client.schoolCode || '').toUpperCase();
+    if (!schoolCode) {
+      return res.json({ classesCount: 0, studentsCount: 0, teachersCount: 0, linked: false });
+    }
+
+    const principal = await User.findOne({ role: 'principal', schoolCode }).select('_id').lean();
+    if (!principal) {
+      return res.json({ classesCount: 0, studentsCount: 0, teachersCount: 0, linked: false });
+    }
+
+    const principalId = principal._id.toString();
+    const [classesCount, studentsCount, teachersCount] = await Promise.all([
+      SchoolClass .countDocuments({ principalId }),
+      SchoolMember.countDocuments({ principalId, type: 'student' }),
+      SchoolMember.countDocuments({ principalId, type: 'teacher' }),
+    ]);
+
+    console.log(`[schoolSummary] school=${schoolCode} classes=${classesCount} students=${studentsCount} teachers=${teachersCount}`);
+    return res.json({ classesCount, studentsCount, teachersCount, linked: true, schoolCode });
+  } catch (err) {
+    console.error('[getClientSchoolSummary]', err);
+    return res.status(500).json({ error: 'Failed to load school summary.' });
+  }
+};
+
+/**
  * GET /api/vendor/clients/:id/orders
  *
  * Returns all orders linked to this client via clientId FK.

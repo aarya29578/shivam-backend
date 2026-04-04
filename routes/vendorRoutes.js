@@ -7,6 +7,7 @@ const {
   getVendorClients,
   getVendorClientById,
   getClientOrders,
+  getClientSchoolSummary,
   createOrder,
   createClient,
   deleteClient,
@@ -34,6 +35,9 @@ router.post('/clients', createClient);
 
 // GET  /api/vendor/clients/:id
 router.get('/clients/:id', getVendorClientById);
+
+// GET  /api/vendor/clients/:id/school-summary
+router.get('/clients/:id/school-summary', getClientSchoolSummary);
 
 // GET  /api/vendor/clients/:id/orders
 router.get('/clients/:id/orders', getClientOrders);
