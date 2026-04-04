@@ -797,8 +797,8 @@ exports.uploadExcel = async (req, res) => {
             ? { type: 'student', phone: s.phone, principalId }
             : { type: 'student', name: s.name, classOrDept: s.classOrDept, principalId },
           update: {
-            $setOnInsert: { type: s.type, name: s.name, principalId },
-            $set: { type: s.type, classOrDept: s.classOrDept, phone: s.phone, address: s.address },
+            $setOnInsert: { type: s.type, principalId },
+            $set: { name: s.name, classOrDept: s.classOrDept, phone: s.phone, address: s.address },
           },
           upsert: true,
         },
