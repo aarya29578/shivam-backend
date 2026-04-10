@@ -20,4 +20,7 @@ router.post('/members/:id/force-logout',ctrl.forceLogoutMember);
 router.post('/id-card-form',  ctrl.saveIdCardForm);
 router.get('/id-card-form',   ctrl.getIdCardForm);
 
+// Purchase Orders (vendor orders visible to principal by school)
+router.get('/purchase-orders', ctrl.getPurchaseOrders);
+
 module.exports = router;

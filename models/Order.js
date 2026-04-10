@@ -24,9 +24,12 @@ const orderSchema = new mongoose.Schema(
     completedCards: { type: Number, min: 0, default: 0 },
     vendorId:       { type: String, required: true, index: true },
     clientId:       { type: mongoose.Schema.Types.ObjectId, ref: 'Client', index: true },
+    schoolCode:     { type: String, trim: true, uppercase: true, index: true },
     deliveryDate:   { type: Date },
+    productId:      { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
     productType:    { type: String, trim: true },
     productName:    { type: String, trim: true },
+    productImage:   { type: String, trim: true },
     pricing: {
       student: { type: Number, min: 0, default: 0 },
       teacher: { type: Number, min: 0, default: 0 },
@@ -46,6 +49,9 @@ const orderSchema = new mongoose.Schema(
         size:         { type: Number },
       },
     ],
+    images: [{ type: String }],
+    variableFields: { type: mongoose.Schema.Types.Mixed, default: [] },
+    columnMappings:  { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }
 );

@@ -4,10 +4,13 @@ const router  = express.Router();
 const {
   getVendorDashboard,
   getVendorOrders,
+  getOrderById,
   getVendorClients,
   getVendorClientById,
   getClientOrders,
   getClientSchoolSummary,
+  getSchoolClasses,
+  getSchoolMembers,
   createOrder,
   createClient,
   updateClient,
@@ -17,13 +20,24 @@ const {
   uploadOrderFilesMiddleware,
   uploadExcel,
   uploadExcelMiddleware,
+  getProducts,
+  uploadSchoolPhotos,
+  uploadSchoolPhotosMiddleware,
+  getSchoolPhotos,
+  deleteSchoolPhoto,
 } = require('../controllers/vendorController');
+
+// GET /api/vendor/products  – shared product catalogue (created via Admin Portal)
+router.get('/products', getProducts);
 
 // GET  /api/vendor/dashboard?vendorId=<id>
 router.get('/dashboard', getVendorDashboard);
 
 // GET  /api/vendor/orders?vendorId=<id>
 router.get('/orders', getVendorOrders);
+
+// GET  /api/vendor/orders/:id
+router.get('/orders/:id', getOrderById);
 
 // POST /api/vendor/orders
 router.post('/orders', createOrder);
@@ -43,6 +57,12 @@ router.patch('/clients/:id', updateClient);
 // GET  /api/vendor/clients/:id/school-summary
 router.get('/clients/:id/school-summary', getClientSchoolSummary);
 
+// GET  /api/vendor/clients/:id/school-classes
+router.get('/clients/:id/school-classes', getSchoolClasses);
+
+// GET  /api/vendor/clients/:id/school-members?type=student|teacher|staff
+router.get('/clients/:id/school-members', getSchoolMembers);
+
 // GET  /api/vendor/clients/:id/orders
 router.get('/clients/:id/orders', getClientOrders);
 
@@ -57,6 +77,16 @@ router.post('/orders/:id/files', uploadOrderFilesMiddleware, uploadOrderFiles);
 
 // POST /api/vendor/upload-excel  – parse Excel and auto-ingest classes/students/teachers
 router.post('/upload-excel', uploadExcelMiddleware, uploadExcel);
+
+// ── School Photos ──────────────────────────────────────────────────
+// POST /api/vendor/school-photos  – upload photos (multipart: schoolId, className, date, photos[])
+router.post('/school-photos', uploadSchoolPhotosMiddleware, uploadSchoolPhotos);
+
+// GET /api/vendor/school-photos/:schoolId  – all photos for a school (grouped by date/class)
+router.get('/school-photos/:schoolId', getSchoolPhotos);
+
+// DELETE /api/vendor/school-photos/:photoId  – remove a single photo
+router.delete('/school-photos/:photoId', deleteSchoolPhoto);
 
 // GET /api/vendor/debug/school?clientId=<id>  – diagnostic counts
 const { debugSchoolData, getVendorSchools } = require('../controllers/vendorController');

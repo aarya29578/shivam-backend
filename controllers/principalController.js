@@ -1,6 +1,9 @@
 const SchoolClass  = require('../models/SchoolClass');
 const SchoolMember = require('../models/SchoolMember');
 const IdCardForm   = require('../models/IdCardForm');
+const Order        = require('../models/Order');
+const User         = require('../models/User');
+const Client       = require('../models/Client');
 
 // ── Classes ──────────────────────────────────────────────────────────────────
 
@@ -338,5 +341,62 @@ exports.getIdCardForm = async (req, res) => {
   } catch (err) {
     console.error('[getIdCardForm]', err);
     return res.status(500).json({ error: 'Failed to fetch form.' });
+  }
+};
+
+// ── Purchase Orders ──────────────────────────────────────────────────────────
+
+exports.getPurchaseOrders = async (req, res) => {
+  try {
+    const { principalId, schoolCode: schoolCodeParam } = req.query;
+    if (!principalId && !schoolCodeParam) {
+      return res.status(400).json({ error: 'principalId or schoolCode required' });
+    }
+
+    // Resolve schoolCode: prefer the direct query param (sent by Flutter from stored user),
+    // fall back to DB lookup via principalId.
+    let schoolCode = schoolCodeParam
+      ? schoolCodeParam.toString().trim().toUpperCase()
+      : null;
+
+    if (!schoolCode && principalId) {
+      const user = await User.findById(principalId).select('schoolCode').lean();
+      if (user?.schoolCode) schoolCode = user.schoolCode;
+    }
+
+    if (!schoolCode) return res.json([]);
+
+    // Find all clients whose schoolCode matches the principal's school code.
+    // This enables orders that only have clientId (no schoolCode on the order itself)
+    // to still be returned — covering orders created before schoolCode was set.
+    const linkedClients = await Client.find({ schoolCode }).select('_id').lean();
+    const clientIds = linkedClients.map(c => c._id);
+
+    const query = clientIds.length
+      ? { $or: [{ schoolCode }, { clientId: { $in: clientIds } }] }
+      : { schoolCode };
+
+    const orders = await Order.find(query)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    console.log('[getPurchaseOrders] schoolCode:', schoolCode, '| linkedClients:', clientIds.length, '| found:', orders.length);
+
+    return res.json(orders.map(o => ({
+      id:           o._id,
+      title:        o.title,
+      schoolName:   o.schoolName,
+      productType:  o.productType  || '',
+      productName:  o.productName  || '',
+      stage:        o.stage,
+      pricing:      o.pricing      || {},
+      deliveryDate: o.deliveryDate,
+      description:  o.description  || '',
+      images:       o.images       || [],
+      createdAt:    o.createdAt,
+    })));
+  } catch (err) {
+    console.error('[getPurchaseOrders]', err);
+    return res.status(500).json({ error: 'Failed to load purchase orders.' });
   }
 };

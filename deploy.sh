@@ -37,7 +37,7 @@ echo ""
 echo "[4/8] Creating .env file..."
 cat > .env << 'ENVEOF'
 PORT=5000
-MONGO_URI=mongodb+srv://aaryaleap_db_user:Test123456@cluster0.3zq4ych.mongodb.net/myapp?retryWrites=true&w=majority&authSource=admin
+MONGO_URI=mongodb+srv://aaryaleap_db_user:ZXCvbnm12345678@cluster0.3zq4ych.mongodb.net/myapp?retryWrites=true&w=majority&authSource=admin
 ENVEOF
 echo "      .env written."
 
