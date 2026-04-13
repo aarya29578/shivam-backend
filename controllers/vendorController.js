@@ -288,11 +288,13 @@ exports.getVendorOrders = async (req, res) => {
       const bucket = grouped[order.stage];
       if (bucket) {
         bucket.push({
-          id:         order._id,
-          title:      order.title,
-          schoolName: order.schoolName,
-          progress:   order.progress,
-          stage:      order.stage,
+          id:           order._id,
+          title:        order.title,
+          schoolName:   order.schoolName,
+          progress:     order.progress,
+          stage:        order.stage,
+          productName:  order.productName  || '',
+          productImage: order.productImage || '',
         });
       }
     }
@@ -313,6 +315,33 @@ exports.getOrderById = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id).lean();
     if (!order) return res.status(404).json({ error: 'Order not found.' });
+
+    // Resolve a stored image URL so it is always reachable by the requesting client.
+    // Stored URLs may be relative ("/uploads/...") or may contain "localhost" which
+    // fails on a physical device.  We rewrite them to use the same host:port the
+    // client used to reach this endpoint.
+    const serverBase = `${req.protocol}://${req.get('host')}`;
+    // Always rewrite the stored URL's host to the current request host so the
+    // image is reachable from whatever device/IP is making this request.
+    const resolveImageUrl = (url) => {
+      if (!url) return url;
+      try {
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          const u = new URL(url);
+          // Replace stored host with current request host (handles localhost,
+          // wrong IP, wrong port, etc.)
+          return `${serverBase}${u.pathname}${u.search}`;
+        }
+        // Relative path → make absolute
+        return `${serverBase}${url.startsWith('/') ? '' : '/'}${url}`;
+      } catch (_) {
+        return url;
+      }
+    };
+
+    const resolvedImages = (order.images || []).map(resolveImageUrl);
+    console.log(`[getOrderById] id=${order._id} images(${resolvedImages.length}):`, resolvedImages);
+
     return res.json({
       id:             order._id,
       title:          order.title,
@@ -325,13 +354,14 @@ exports.getOrderById = async (req, res) => {
       productId:      order.productId,
       productType:    order.productType,
       productName:    order.productName,
-      productImage:   order.productImage,
+      productImage:   resolveImageUrl(order.productImage),
       pricing:        order.pricing,
       description:    order.description,
       youtubeLink:    order.youtubeLink,
       instagramLink:  order.instagramLink,
       videoUrl:       order.videoUrl,
-      images:         order.images || [],
+      images:         resolvedImages,
+      orderImages:    resolvedImages,
       files:          (order.files || []).map(f => ({
         originalName: f.originalName,
         path:         f.path,
@@ -1236,27 +1266,23 @@ exports.getProducts = async (req, res) => {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Resolve image paths to full URLs, rewriting any stored 5000 port refs to
-    // this backend (5001) so Flutter doesn't depend on the EP backend running.
-    const adminBase = (process.env.ADMIN_PORTAL_URL || '').replace(/\/$/, '');
-    const rewriteHost = adminBase ? new URL(adminBase) : null;
+    // Resolve image paths to full URLs, rewriting any stored 5000 port refs or
+    // localhost refs to the requesting host so Flutter always gets a reachable URL.
+    const serverBase = `${req.protocol}://${req.get('host')}`;
     const toFullUrl = (src) => {
       if (!src) return src;
       if (src.startsWith('http://') || src.startsWith('https://')) {
-        // Rewrite stored EP-backend URLs to point to THIS backend
-        if (rewriteHost) {
-          try {
-            const u = new URL(src);
-            if (u.hostname === rewriteHost.hostname && u.port !== rewriteHost.port) {
-              u.port = rewriteHost.port;
-              u.protocol = rewriteHost.protocol;
-              return u.toString();
-            }
-          } catch (_) {}
-        }
+        try {
+          const u = new URL(src);
+          // Rewrite any localhost or EP-backend (5000) URL to use this server's host
+          if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.port === '5000') {
+            return `${serverBase}${u.pathname}${u.search}`;
+          }
+        } catch (_) {}
         return src;
       }
-      return adminBase ? `${adminBase}${src.startsWith('/') ? '' : '/'}${src}` : src;
+      // Relative path → prepend this server's base
+      return `${serverBase}${src.startsWith('/') ? '' : '/'}${src}`;
     };
     const products = rawProducts.map((p) => ({
       ...p,

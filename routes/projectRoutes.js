@@ -50,6 +50,7 @@ router.post('/', async (req, res) => {
       description,
       stage,
       vendorId,
+      orderImages,
     } = req.body;
 
     const projectName  = (name || title || 'Untitled Order').toString().trim();
@@ -77,6 +78,7 @@ router.post('/', async (req, res) => {
       pricing:        pricing      || {},
       variableFields: Array.isArray(variableFields) ? variableFields : [],
       columnMappings: columnMappings || {},
+      images:         Array.isArray(orderImages) ? orderImages : [],
       createdBy:      'vendor',
       amount:         0,
       pages:          1,
@@ -110,6 +112,7 @@ router.post('/', async (req, res) => {
       pricing:        pricing      || {},
       variableFields: Array.isArray(variableFields) ? variableFields : [],
       columnMappings: columnMappings || {},
+      images:         Array.isArray(orderImages) ? orderImages : [],
       ...(clientId    && { clientId }),
       ...(schoolCode  && { schoolCode }),
       ...(productId   && { productId }),
@@ -152,6 +155,58 @@ router.get('/', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// POST /api/projects/upload-images
+// Upload-first standalone endpoint. Flutter calls this BEFORE creating a project,
+// receives back permanent URLs, then includes them in the POST / payload.
+// ─────────────────────────────────────────────────────────────────────────────
+const orderImagesUploadDir = path.join(__dirname, '..', 'uploads', 'order-images');
+if (!fs.existsSync(orderImagesUploadDir)) fs.mkdirSync(orderImagesUploadDir, { recursive: true });
+
+const _orderImageStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, orderImagesUploadDir),
+  filename: (_req, file, cb) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${unique}${path.extname(file.originalname)}`);
+  },
+});
+const _orderImageUpload = multer({
+  storage: _orderImageStorage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are accepted'));
+  },
+});
+
+router.post('/upload-images', _orderImageUpload.array('images', 10), (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No images received.' });
+    }
+    // Build the base URL.  req.get('host') often returns the hostname WITHOUT the
+    // port when the client omits it (e.g. a reverse-proxy scenario).  Fall back
+    // to the explicit SERVER_BASE_URL env var or construct it from hostname + PORT.
+    const serverBase = process.env.SERVER_BASE_URL
+      ? process.env.SERVER_BASE_URL.replace(/\/$/, '')
+      : (() => {
+          const host = req.get('host') || 'localhost';
+          // If host already contains a port, use as-is; otherwise append our port
+          const hasPort = host.includes(':');
+          const port = process.env.PORT || 5001;
+          return `${req.protocol}://${hasPort ? host : `${host}:${port}`}`;
+        })();
+    const imageUrls = req.files.map(
+      (f) => `${serverBase}/uploads/order-images/${f.filename}`,
+    );
+    console.log('[POST /api/projects/upload-images] Uploaded', imageUrls.length, 'image(s):', imageUrls);
+    return res.json({ imageUrls });
+  } catch (err) {
+    console.error('[POST /api/projects/upload-images]', err);
+    return res.status(500).json({ error: 'Upload failed.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/projects/:id/files
 // Attaches uploaded files to an existing project.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,6 +241,64 @@ router.post('/:id/files', _upload.array('files', 20), async (req, res) => {
   } catch (err) {
     console.error('[POST /api/projects/:id/files]', err);
     return res.status(500).json({ error: 'Failed to upload files.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/projects/:id/images
+// Attaches order images to an existing project and mirrors to the linked Order.
+// ─────────────────────────────────────────────────────────────────────────────
+const orderImagesDir = path.join(__dirname, '..', 'uploads', 'order-images');
+if (!fs.existsSync(orderImagesDir)) fs.mkdirSync(orderImagesDir, { recursive: true });
+
+const _imageStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, orderImagesDir),
+  filename: (_req, file, cb) => {
+    const unique = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
+    cb(null, `${unique}${path.extname(file.originalname)}`);
+  },
+});
+const _uploadImages = multer({
+  storage: _imageStorage,
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are allowed.'));
+  },
+});
+
+router.post('/:id/images', _uploadImages.array('images', 10), async (req, res) => {
+  try {
+    const project = await Project.findById(req.params.id);
+    if (!project) return res.status(404).json({ error: 'Project not found.' });
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No images received.' });
+    }
+
+    const serverBase = `${req.protocol}://${req.get('host')}`;
+    const imageUrls = req.files.map(
+      (f) => `${serverBase}/uploads/order-images/${f.filename}`,
+    );
+
+    // Mirror to Project
+    if (!Array.isArray(project.images)) project.images = [];
+    project.images.push(...imageUrls);
+    await project.save();
+
+    // Mirror to linked Order via vendorOrderId stored on project
+    if (project.vendorOrderId) {
+      await Order.findByIdAndUpdate(project.vendorOrderId, {
+        $push: { images: { $each: imageUrls } },
+      });
+    }
+
+    console.log('[POST /api/projects/:id/images] Saved', imageUrls.length, 'image(s) to project', req.params.id);
+
+    return res.status(201).json({ projectId: project._id, imageUrls });
+  } catch (err) {
+    console.error('[POST /api/projects/:id/images]', err);
+    return res.status(500).json({ error: 'Failed to upload images.' });
   }
 });
 

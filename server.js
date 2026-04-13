@@ -44,6 +44,8 @@ app.use('/api/projects', projectRoutes);
 console.log('[Server] ✅ Project routes registered at /api/projects');
 // Serve uploaded quick-capture photos and order files as static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Explicit static route for order images (ensures order-images subdir is always served)
+app.use('/uploads/order-images', express.static(path.join(__dirname, 'uploads', 'order-images')));
 // Serve product images stored in public/uploads (used by vendor product catalogue)
 const publicUploadsDir = path.join(__dirname, 'public', 'uploads');
 if (!require('fs').existsSync(publicUploadsDir)) require('fs').mkdirSync(publicUploadsDir, { recursive: true });

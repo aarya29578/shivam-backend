@@ -50,6 +50,7 @@ const projectSchema = new mongoose.Schema(
         size:         Number,
       },
     ],
+    images: [{ type: String }],
     createdBy:     { type: String, default: 'admin' },   // 'vendor' for mobile-originated
     vendorOrderId: { type: String },                      // link back to edumid Order._id
   },
