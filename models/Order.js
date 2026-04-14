@@ -54,6 +54,7 @@ const orderSchema = new mongoose.Schema(
     columnMappings:  { type: mongoose.Schema.Types.Mixed, default: {} },
     quantity:        { type: Number, default: 1 },
     excelData:       { type: mongoose.Schema.Types.Mixed, default: [] },
+    excelHeaders:    [{ type: String }],
     excelFileName:   { type: String },
     attachments:     [{ type: String }],
   },
