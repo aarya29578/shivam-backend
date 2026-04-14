@@ -42,13 +42,16 @@ app.use('/api/notices', noticeRoutes);
 app.use('/api/upload', quickPhotoRoutes);
 app.use('/api/projects', projectRoutes);
 console.log('[Server] ✅ Project routes registered at /api/projects');
-// Serve uploaded quick-capture photos and order files as static files
+// Serve vendor-uploaded files (public/uploads/) at /uploads — takes priority
+// so the new unified upload-files endpoint URLs are always reachable.
+const publicUploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!require('fs').existsSync(publicUploadsDir)) require('fs').mkdirSync(publicUploadsDir, { recursive: true });
+app.use('/uploads', express.static(publicUploadsDir));
+// Also serve legacy uploads dirs (order-files, order-images, quick-photos …)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Explicit static route for order images (ensures order-images subdir is always served)
 app.use('/uploads/order-images', express.static(path.join(__dirname, 'uploads', 'order-images')));
-// Serve product images stored in public/uploads (used by vendor product catalogue)
-const publicUploadsDir = path.join(__dirname, 'public', 'uploads');
-if (!require('fs').existsSync(publicUploadsDir)) require('fs').mkdirSync(publicUploadsDir, { recursive: true });
+// Keep /public/uploads route for backwards-compat (old product image URLs)
 app.use('/public/uploads', express.static(publicUploadsDir));
 // Also serve the Enterprise Portal's uploads folder so flutter can load product
 // images even when the EP backend (port 5000) is not running.

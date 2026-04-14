@@ -41,6 +41,10 @@ const projectSchema = new mongoose.Schema(
     pricing:        { type: mongoose.Schema.Types.Mixed },
     variableFields: [mongoose.Schema.Types.Mixed],
     columnMappings: { type: mongoose.Schema.Types.Mixed },
+    quantity:       { type: Number, default: 1 },
+    excelData:      [mongoose.Schema.Types.Mixed],
+    excelFileName:  { type: String },
+    attachments:    [{ type: String }],
     files: [
       {
         originalName: String,

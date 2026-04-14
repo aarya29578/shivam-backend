@@ -339,8 +339,10 @@ exports.getOrderById = async (req, res) => {
       }
     };
 
-    const resolvedImages = (order.images || []).map(resolveImageUrl);
+    const resolvedImages      = (order.images      || []).map(resolveImageUrl);
+    const resolvedAttachments  = (order.attachments || []).filter(Boolean).map(resolveImageUrl);
     console.log(`[getOrderById] id=${order._id} images(${resolvedImages.length}):`, resolvedImages);
+    console.log(`[getOrderById] id=${order._id} attachments(${resolvedAttachments.length}):`, resolvedAttachments);
 
     return res.json({
       id:             order._id,
@@ -362,6 +364,12 @@ exports.getOrderById = async (req, res) => {
       videoUrl:       order.videoUrl,
       images:         resolvedImages,
       orderImages:    resolvedImages,
+      attachments:    resolvedAttachments,
+      excelFileName:  order.excelFileName || '',
+      excelData:      Array.isArray(order.excelData) ? order.excelData : [],
+      quantity:       order.quantity || 1,
+      variableFields: order.variableFields || [],
+      columnMappings: order.columnMappings  || {},
       files:          (order.files || []).map(f => ({
         originalName: f.originalName,
         path:         f.path,

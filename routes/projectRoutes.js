@@ -9,6 +9,7 @@ const router   = express.Router();
 const path     = require('path');
 const fs       = require('fs');
 const multer   = require('multer');
+const upload   = require('../utils/upload');   // unified upload config → public/uploads/
 const Project  = require('../models/Project');
 const Order    = require('../models/Order');
 const Client   = require('../models/Client');
@@ -46,6 +47,10 @@ router.post('/', async (req, res) => {
       pricing,
       variableFields,
       columnMappings,
+      quantity,
+      excelData,
+      excelFileName,
+      attachmentUrls,
       deliveryDate,
       description,
       stage,
@@ -78,6 +83,10 @@ router.post('/', async (req, res) => {
       pricing:        pricing      || {},
       variableFields: Array.isArray(variableFields) ? variableFields : [],
       columnMappings: columnMappings || {},
+      quantity:       quantity != null ? Number(quantity) : 1,
+      excelData:      Array.isArray(excelData) ? excelData : [],
+      excelFileName:  excelFileName || '',
+      attachments:    Array.isArray(attachmentUrls) ? attachmentUrls : [],
       images:         Array.isArray(orderImages) ? orderImages : [],
       createdBy:      'vendor',
       amount:         0,
@@ -112,6 +121,10 @@ router.post('/', async (req, res) => {
       pricing:        pricing      || {},
       variableFields: Array.isArray(variableFields) ? variableFields : [],
       columnMappings: columnMappings || {},
+      quantity:       quantity != null ? Number(quantity) : 1,
+      excelData:      Array.isArray(excelData) ? excelData : [],
+      excelFileName:  excelFileName || '',
+      attachments:    Array.isArray(attachmentUrls) ? attachmentUrls : [],
       images:         Array.isArray(orderImages) ? orderImages : [],
       ...(clientId    && { clientId }),
       ...(schoolCode  && { schoolCode }),
@@ -155,7 +168,49 @@ router.get('/', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/projects/upload-images
+// POST /api/projects/upload-files   ← unified endpoint (attachments + images)
+// Accepts field name "files" (up to 30 files), stores in public/uploads/,
+// returns { urls: ["http://HOST/uploads/filename", ...] }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/upload-files', upload.array('files', 30), (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files received.' });
+    }
+    // Always use the VPS public IP so URLs work from physical devices.
+    // Falls back to req host only when SERVER_BASE_URL is explicitly set in .env.
+    const serverBase = (process.env.SERVER_BASE_URL || 'http://72.62.241.170').replace(/\/$/, '');
+    const urls = req.files.map((f) => `${serverBase}/uploads/${f.filename}`);
+    console.log('[POST /api/projects/upload-files] Uploaded', urls.length, 'file(s):', urls);
+    return res.json({ urls });
+  } catch (err) {
+    console.error('[POST /api/projects/upload-files]', err);
+    return res.status(500).json({ error: 'Upload failed.' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────// POST /api/projects/upload-attachments
+// Flutter uploads design files/docs BEFORE creating the project.
+// Returns permanent server URLs that are then stored in the project payload.
+// ───────────────────────────────────────────────────────────────────────────────
+router.post('/upload-attachments', _upload.array('files', 30), (req, res) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ error: 'No files received.' });
+    }
+    const serverBase = (process.env.SERVER_BASE_URL || 'http://72.62.241.170').replace(/\/$/, '');
+    const urls = req.files.map(
+      (f) => `${serverBase}/uploads/order-files/${f.filename}`,
+    );
+    console.log('[POST /api/projects/upload-attachments] Uploaded', urls.length, 'file(s)');
+    return res.json({ urls });
+  } catch (err) {
+    console.error('[POST /api/projects/upload-attachments]', err);
+    return res.status(500).json({ error: 'Upload failed.' });
+  }
+});
+
+// ───────────────────────────────────────────────────────────────────────────────// POST /api/projects/upload-images
 // Upload-first standalone endpoint. Flutter calls this BEFORE creating a project,
 // receives back permanent URLs, then includes them in the POST / payload.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,18 +238,8 @@ router.post('/upload-images', _orderImageUpload.array('images', 10), (req, res) 
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No images received.' });
     }
-    // Build the base URL.  req.get('host') often returns the hostname WITHOUT the
-    // port when the client omits it (e.g. a reverse-proxy scenario).  Fall back
-    // to the explicit SERVER_BASE_URL env var or construct it from hostname + PORT.
-    const serverBase = process.env.SERVER_BASE_URL
-      ? process.env.SERVER_BASE_URL.replace(/\/$/, '')
-      : (() => {
-          const host = req.get('host') || 'localhost';
-          // If host already contains a port, use as-is; otherwise append our port
-          const hasPort = host.includes(':');
-          const port = process.env.PORT || 5001;
-          return `${req.protocol}://${hasPort ? host : `${host}:${port}`}`;
-        })();
+    // Always use the VPS public IP so URLs work on physical devices.
+    const serverBase = (process.env.SERVER_BASE_URL || 'http://72.62.241.170').replace(/\/$/, '');
     const imageUrls = req.files.map(
       (f) => `${serverBase}/uploads/order-images/${f.filename}`,
     );

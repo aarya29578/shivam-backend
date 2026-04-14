@@ -52,6 +52,10 @@ const orderSchema = new mongoose.Schema(
     images: [{ type: String }],
     variableFields: { type: mongoose.Schema.Types.Mixed, default: [] },
     columnMappings:  { type: mongoose.Schema.Types.Mixed, default: {} },
+    quantity:        { type: Number, default: 1 },
+    excelData:       { type: mongoose.Schema.Types.Mixed, default: [] },
+    excelFileName:   { type: String },
+    attachments:     [{ type: String }],
   },
   { timestamps: true }
 );
