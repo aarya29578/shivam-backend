@@ -369,6 +369,7 @@ exports.getOrderById = async (req, res) => {
       excelData:      Array.isArray(order.excelData) ? order.excelData : [],
       excelHeaders:   Array.isArray(order.excelHeaders) ? order.excelHeaders : [],
       quantity:       order.quantity || 1,
+      unit:           order.unit || '',
       variableFields: order.variableFields || [],
       columnMappings: order.columnMappings  || {},
       files:          (order.files || []).map(f => ({

@@ -53,6 +53,7 @@ const orderSchema = new mongoose.Schema(
     variableFields: { type: mongoose.Schema.Types.Mixed, default: [] },
     columnMappings:  { type: mongoose.Schema.Types.Mixed, default: {} },
     quantity:        { type: Number, default: 1 },
+    unit:            { type: String, default: '' },
     excelData:       { type: mongoose.Schema.Types.Mixed, default: [] },
     excelHeaders:    [{ type: String }],
     excelFileName:   { type: String },
