@@ -1164,7 +1164,7 @@ exports.uploadProductImagesMiddleware = multer({
 exports.uploadProductImages = (req, res) => {
   const files = Array.isArray(req.files) ? req.files : [];
   if (!files.length) return res.status(400).json({ error: 'No images uploaded' });
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const baseUrl = process.env.VPS_BASE_URL || 'http://72.62.241.170';
   const urls = files.map((f) => `${baseUrl}/uploads/products/images/${f.filename}`);
   return res.json({ urls });
 };
