@@ -1136,6 +1136,31 @@ exports.getVendorSchools = async (req, res) => {
   }
 };
 
+// ── Product Image Upload (stores on VPS, returns permanent URLs) ─────────────
+const _productImgDir = path.join(__dirname, '..', 'uploads', 'products', 'images');
+if (!fs.existsSync(_productImgDir)) fs.mkdirSync(_productImgDir, { recursive: true });
+
+const _productImgStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, _productImgDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname) || '';
+    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+  },
+});
+
+exports.uploadProductImagesMiddleware = multer({
+  storage: _productImgStorage,
+  limits: { files: 10, fileSize: 20 * 1024 * 1024 },
+}).array('images', 10);
+
+exports.uploadProductImages = (req, res) => {
+  const files = Array.isArray(req.files) ? req.files : [];
+  if (!files.length) return res.status(400).json({ error: 'No images uploaded' });
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const urls = files.map((f) => `${baseUrl}/uploads/products/images/${f.filename}`);
+  return res.json({ urls });
+};
+
 // ── Products ──────────────────────────────────────────────────────────────────
 const Product = require('../models/Product');
 

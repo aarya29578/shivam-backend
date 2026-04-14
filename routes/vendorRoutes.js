@@ -21,6 +21,8 @@ const {
   uploadExcel,
   uploadExcelMiddleware,
   getProducts,
+  uploadProductImages,
+  uploadProductImagesMiddleware,
   uploadSchoolPhotos,
   uploadSchoolPhotosMiddleware,
   getSchoolPhotos,
@@ -29,6 +31,9 @@ const {
 
 // GET /api/vendor/products  – shared product catalogue (created via Admin Portal)
 router.get('/products', getProducts);
+
+// POST /api/vendor/upload-product-image  – upload product images to VPS, returns permanent URLs
+router.post('/upload-product-image', uploadProductImagesMiddleware, uploadProductImages);
 
 // GET  /api/vendor/dashboard?vendorId=<id>
 router.get('/dashboard', getVendorDashboard);
