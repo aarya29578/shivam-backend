@@ -1,0 +1,43 @@
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Flutter / Dart
+edumid/build/
+edumid/.dart_tool/
+edumid/.flutter-plugins
+edumid/.flutter-plugins-dependencies
+edumid/.packages
+edumid/pubspec.lock
+
+# Android
+edumid/android/.gradle/
+edumid/android/local.properties
+edumid/android/key.properties
+edumid/android/app/*.jks
+
+# iOS
+edumid/ios/Pods/
+edumid/ios/.symlinks/
+edumid/ios/Flutter/Flutter.framework
+edumid/ios/Flutter/Flutter.podspec
+
+# Backup folders
+backend-server-backup-*/
+
+# Uploads (local media files)
+backend/uploads/*
+backend/public/uploads/*
+!backend/uploads/.gitkeep
+!backend/public/uploads/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
